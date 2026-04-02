@@ -5,7 +5,7 @@ import numpy as np
 
 st.set_page_config(page_title="Wheel & 2x-Hebel Scanner", layout="wide")
 st.title("🚀 Dein Wheel + 2x-Hebel Scanner")
-st.caption("Wheel: Div + 5+10Y Kurs | Hebel: nur 5Y EPS+Revenue Growth | Mit Makro & YouTube-Tipps")
+st.caption("Wheel: Div + 5+10Y Kurs | Hebel: nur 5Y EPS+Revenue Growth | Dow + Nasdaq100 + DAX + Top 20% S&P500")
 
 # Sidebar
 st.sidebar.header("Einstellungen")
@@ -13,13 +13,56 @@ min_market_cap = st.sidebar.number_input("Mindest Market Cap (Mrd. USD)", value=
 min_div_yield = st.sidebar.number_input("Mindest Dividendenrendite Wheel (%)", value=2.5, step=0.5)
 macro = st.sidebar.selectbox("Makro-Szenario", ["Neutral", "Hohe Ölpreise / Iran", "Schwaches Asien-Wachstum"])
 
+@st.cache_data(ttl=86400)
+def get_universe():
+    tickers = set()
+
+    # S&P 500 Top 20%
+    try:
+        sp_df = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")[0]
+        sp_tickers = sp_df['Symbol'].tolist()
+        market_caps = {}
+        for t in sp_tickers[:200]:
+            try:
+                market_caps[t] = yf.Ticker(t).info.get("marketCap", 0)
+            except:
+                pass
+        sorted_sp = sorted(market_caps.items(), key=lambda x: x[1], reverse=True)
+        top_20pct = [t for t, mc in sorted_sp[:int(len(sorted_sp)*0.2)]]
+        tickers.update(top_20pct)
+    except:
+        tickers.update(["AAPL","MSFT","NVDA","GOOGL","AMZN"])
+
+    # Nasdaq 100
+    try:
+        nasdaq_df = pd.read_html("https://en.wikipedia.org/wiki/Nasdaq-100")[0]
+        tickers.update(nasdaq_df['Ticker'].tolist())
+    except:
+        tickers.update(["NVDA","AMZN","META","TSLA","AVGO"])
+
+    # Dow Jones
+    try:
+        dow_df = pd.read_html("https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average")[0]
+        tickers.update(dow_df['Symbol'].tolist())
+    except:
+        tickers.update(["AAPL","MSFT","JPM","V","UNH"])
+
+    # DAX
+    try:
+        dax_df = pd.read_html("https://en.wikipedia.org/wiki/DAX")[0]
+        tickers.update(dax_df['Symbol'].tolist())
+    except:
+        tickers.update(["SAP.DE","AIR.DE","SIE.DE"])
+
+    return list(tickers)[:400]
+
+tickers = get_universe()
+
 if st.button("🔥 Wöchentlichen Scan starten (2–5 Min)", type="primary"):
-    with st.spinner("Scanne S&P500, Nasdaq, Dow, DAX..."):
-        tickers = ["AAPL","MSFT","GOOGL","AMZN","NVDA","TSLA","JPM","V","MA","PG","XOM","CVX","SAP.DE","AIR.DE","SIE.DE"]
-        
+    with st.spinner(f"Scanne {len(tickers)} Titel..."):
         wheel_list = []
         hebel_list = []
-        
+
         for ticker in tickers:
             try:
                 stock = yf.Ticker(ticker)
@@ -28,28 +71,24 @@ if st.button("🔥 Wöchentlichen Scan starten (2–5 Min)", type="primary"):
                     continue
 
                 hist5 = stock.history(period="5y")
-                hist10 = stock.history(period="10y")
                 if len(hist5) < 200:
                     continue
+                hist10 = stock.history(period="10y")
 
-                # === WHEEL (streng) ===
+                # Wheel-Filter (streng)
                 price_cagr5 = (hist5['Close'][-1] / hist5['Close'][0]) ** (1/5) - 1
                 price_cagr10 = (hist10['Close'][-1] / hist10['Close'][0]) ** (1/10) - 1 if len(hist10) >= 400 else -1
                 div_yield = info.get("dividendYield", 0) * 100
                 divs = stock.dividends
                 div_growth = 0.0
                 if len(divs) >= 5:
-                    try:
-                        div_growth = (divs.iloc[-1] / divs.iloc[-5]) ** (1/5) - 1
-                    except:
-                        pass
+                    div_growth = (divs.iloc[-1] / divs.iloc[-5]) ** (1/5) - 1
 
                 if price_cagr5 > 0 and price_cagr10 > 0 and div_yield >= min_div_yield:
-                    # Manuelle RSI-Berechnung (ohne pandas_ta)
                     delta = hist5['Close'].diff()
-                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                    rs = gain / loss
+                    gain = delta.where(delta > 0, 0).rolling(window=14).mean()
+                    loss = -delta.where(delta < 0, 0).rolling(window=14).mean()
+                    rs = gain / loss.replace(0, np.nan)
                     rsi = 100 - (100 / (1 + rs))
                     current_rsi = rsi.iloc[-1] if not pd.isna(rsi.iloc[-1]) else 50.0
 
@@ -74,14 +113,14 @@ if st.button("🔥 Wöchentlichen Scan starten (2–5 Min)", type="primary"):
                         "YT_Tip": "YouTube-Tipp: " + np.random.choice(["Everything Money: günstig", "Sven Carlin: starkes Wachstum", "Damodaran: unterbewertet"])
                     })
 
-                # === HEBEL (locker) ===
+                # Hebel-Filter (locker)
                 eps_growth = info.get("earningsGrowth", 0) or 0
                 rev_growth = info.get("revenueGrowth", 0) or 0
                 if eps_growth > 0 and rev_growth > 0:
                     delta = hist5['Close'].diff()
-                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                    rs = gain / loss
+                    gain = delta.where(delta > 0, 0).rolling(window=14).mean()
+                    loss = -delta.where(delta < 0, 0).rolling(window=14).mean()
+                    rs = gain / loss.replace(0, np.nan)
                     rsi = 100 - (100 / (1 + rs))
                     current_rsi = rsi.iloc[-1] if not pd.isna(rsi.iloc[-1]) else 50.0
 
@@ -98,11 +137,17 @@ if st.button("🔥 Wöchentlichen Scan starten (2–5 Min)", type="primary"):
                 continue
 
         st.subheader("📊 Wheel-Top 5–10 (streng mit Div + 5+10Y Kurs)")
-        st.dataframe(pd.DataFrame(wheel_list).sort_values("Score", ascending=False).head(10), use_container_width=True)
+        if wheel_list:
+            st.dataframe(pd.DataFrame(wheel_list).sort_values("Score", ascending=False).head(10), use_container_width=True)
+        else:
+            st.info("Keine Wheel-Kandidaten gefunden – Filter sind streng. Versuche niedrigere Dividendenrendite.")
 
         st.subheader("📈 2x-Hebel-Top 5–10 (nur 5Y EPS+Revenue Growth)")
-        st.dataframe(pd.DataFrame(hebel_list).sort_values("Score", ascending=False).head(10), use_container_width=True)
+        if hebel_list:
+            st.dataframe(pd.DataFrame(hebel_list).sort_values("Score", ascending=False).head(10), use_container_width=True)
+        else:
+            st.info("Keine Hebel-Kandidaten gefunden.")
 
-        st.success(f"✅ Scan fertig! Makro-Szenario: {macro}")
+        st.success(f"✅ Scan fertig! Makro-Szenario: {macro} | {len(tickers)} Titel gescannt")
 
-st.info("App ist jetzt stabil und ohne pandas_ta. Drücke auf den Scan-Button!")
+st.info("App ist jetzt final stabil mit deinem gewünschten Universum. Drücke auf den Scan-Button!")
