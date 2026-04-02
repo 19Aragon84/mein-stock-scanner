@@ -779,8 +779,7 @@ st.info(
     "Das Put-Delta ist approximiert. Für sauberes Live-Optionsscreening später besser IBKR oder Polygon anbinden."
 )
 
-st.markdown(
-    """
+st.markdown("""
 ### Installation
 
 ```bash
