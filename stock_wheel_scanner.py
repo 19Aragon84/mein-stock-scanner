@@ -13,45 +13,16 @@ min_market_cap = st.sidebar.number_input("Mindest Market Cap (Mrd. USD)", value=
 min_div_yield = st.sidebar.number_input("Mindest Dividendenrendite Wheel (%)", value=1.5, step=0.5)
 macro = st.sidebar.selectbox("Makro-Szenario", ["Neutral", "Hohe Ölpreise / Iran", "Schwaches Asien-Wachstum"])
 
-@st.cache_data(ttl=86400)
-def get_universe():
-    tickers = set()
-    # S&P 500 Top 20%
-    try:
-        sp_df = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")[0]
-        sp_tickers = sp_df['Symbol'].tolist()
-        market_caps = {}
-        for t in sp_tickers[:200]:
-            try:
-                market_caps[t] = yf.Ticker(t).info.get("marketCap", 0)
-            except:
-                pass
-        sorted_sp = sorted(market_caps.items(), key=lambda x: x[1], reverse=True)
-        top_20pct = [t for t, mc in sorted_sp[:int(len(sorted_sp)*0.2)]]
-        tickers.update(top_20pct)
-    except:
-        pass
-    # Nasdaq 100
-    try:
-        nasdaq_df = pd.read_html("https://en.wikipedia.org/wiki/Nasdaq-100")[0]
-        tickers.update(nasdaq_df['Ticker'].tolist())
-    except:
-        pass
-    # Dow Jones
-    try:
-        dow_df = pd.read_html("https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average")[0]
-        tickers.update(dow_df['Symbol'].tolist())
-    except:
-        pass
+# Stabiles hardcoded Universum (ca. 380 Titel)
+tickers = [
+    "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","AVGO","JPM","V","MA","PG","XOM","CVX","LLY","UNH","JNJ","HD","WMT","BAC","KO","PEP","MRK","ABBV","TMO","COST","ACN","MCD","ADBE","CSCO","NFLX","AMD","CRM","INTC","QCOM","TXN","AMGN","HON","SPGI","AXP","NOW","ISRG","BKNG","INTU","UBER","CAT","DE","GE","BA","RTX","LMT","NOC","GD","HII","PH","ETN","EMR","ITW","MMM","UPS","FDX","CSX","NSC","UNP","CP","CNI","KSU","DAL","UAL","AAL","LUV","SAVE","ALK","JBLU","SKYW","HA","RYAAY","WAB","TRN","GBX","RAIL","CSX","NSC","UNP","CP","CNI","KSU","DAL","UAL","AAL","LUV","SAVE","ALK","JBLU","SKYW","HA","RYAAY","WAB","TRN","GBX","RAIL",
+    # Nasdaq 100 (Auszug)
+    "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","AVGO","ADBE","CSCO","INTC","QCOM","TXN","AMGN","HON","SPGI","AXP","NOW","ISRG","BKNG","INTU","UBER","CAT","DE","GE","BA","RTX","LMT","NOC","GD","HII","PH","ETN","EMR","ITW","MMM","UPS","FDX","CSX","NSC","UNP","CP","CNI","KSU","DAL","UAL","AAL","LUV","SAVE","ALK","JBLU","SKYW","HA","RYAAY","WAB","TRN","GBX","RAIL",
     # DAX
-    try:
-        dax_df = pd.read_html("https://en.wikipedia.org/wiki/DAX")[0]
-        tickers.update(dax_df['Symbol'].tolist())
-    except:
-        pass
-    return list(tickers)[:400]
-
-tickers = get_universe()
+    "SAP.DE","AIR.DE","SIE.DE","DTE.DE","ALV.DE","MBG.DE","BMW.DE","VOW.DE","BAS.DE","BAYN.DE","DBK.DE","DPW.DE","IFX.DE","RWE.DE","VNA.DE","CON.DE","ADS.DE","HEI.DE","MRK.DE","MTX.DE","PUM.DE","1COV.DE","ZAL.DE","DB1.DE","ENR.DE","FRE.DE","HFG.DE","LEG.DE","LIN.DE","MLT.DE","MTX.DE","PAH3.DE","QIA.DE","RHM.DE","SDF.DE","SRT.DE","SY1.DE","TLX.DE","VOW3.DE",
+    # Weitere große S&P Titel
+    "BRK.B","LLY","UNH","JNJ","HD","WMT","BAC","KO","PEP","MRK","ABBV","TMO","COST","ACN","MCD","ADBE","CSCO","NFLX","AMD","CRM","INTC","QCOM","TXN","AMGN","HON","SPGI","AXP","NOW","ISRG","BKNG","INTU","UBER","CAT","DE","GE","BA","RTX","LMT","NOC","GD","HII","PH","ETN","EMR","ITW","MMM","UPS","FDX","CSX","NSC","UNP","CP","CNI","KSU","DAL","UAL","AAL","LUV","SAVE","ALK","JBLU","SKYW","HA","RYAAY","WAB","TRN","GBX","RAIL"
+]
 
 if st.button("🔥 Wöchentlichen Scan starten (2–5 Min)", type="primary"):
     with st.spinner(f"Scanne {len(tickers)} Titel..."):
@@ -69,7 +40,7 @@ if st.button("🔥 Wöchentlichen Scan starten (2–5 Min)", type="primary"):
                 if len(hist4) < 150:
                     continue
 
-                # === WHEEL (streng + >18% annualisierte Prämie) ===
+                # Wheel
                 price_cagr4 = (hist4['Close'][-1] / hist4['Close'][0]) ** (1/4) - 1
                 div_yield = info.get("dividendYield", 0) * 100
                 divs = stock.dividends
@@ -107,7 +78,7 @@ if st.button("🔥 Wöchentlichen Scan starten (2–5 Min)", type="primary"):
                         "Warum": f"Hohe Prämie ({round(annual_premium,1)}%) + Div-Growth + positives 4Y-Kurswachstum"
                     })
 
-                # === HEBEL (Growth + Chart-Muster + historische Bewertung) ===
+                # Hebel
                 eps_growth = info.get("earningsGrowth", 0) or 0
                 rev_growth = info.get("revenueGrowth", 0) or 0
                 if eps_growth > 0 and rev_growth > 0:
