@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import pandas_ta as ta
 
 st.set_page_config(page_title="Wheel & 2x-Hebel Scanner", layout="wide")
 st.title("🚀 Dein Wheel + 2x-Hebel Scanner")
@@ -14,9 +13,8 @@ min_market_cap = st.sidebar.number_input("Mindest Market Cap (Mrd. USD)", value=
 min_div_yield = st.sidebar.number_input("Mindest Dividendenrendite Wheel (%)", value=2.5, step=0.5)
 macro = st.sidebar.selectbox("Makro-Szenario", ["Neutral", "Hohe Ölpreise / Iran", "Schwaches Asien-Wachstum"])
 
-if st.button("🔥 Wöchentlichen Scan starten (3–8 Min)", type="primary"):
+if st.button("🔥 Wöchentlichen Scan starten (2–5 Min)", type="primary"):
     with st.spinner("Scanne S&P500, Nasdaq, Dow, DAX..."):
-        # Kleines, stabiles Universe für den Start (kann später erweitert werden)
         tickers = ["AAPL","MSFT","GOOGL","AMZN","NVDA","TSLA","JPM","V","MA","PG","XOM","CVX","SAP.DE","AIR.DE","SIE.DE"]
         
         wheel_list = []
@@ -47,10 +45,13 @@ if st.button("🔥 Wöchentlichen Scan starten (3–8 Min)", type="primary"):
                         pass
 
                 if price_cagr5 > 0 and price_cagr10 > 0 and div_yield >= min_div_yield:
-                    df = hist5.copy()
-                    df['RSI'] = ta.rsi(df['Close'], length=14)
-                    macd = ta.macd(df['Close'])
-                    current_rsi = df['RSI'][-1] if not pd.isna(df['RSI'][-1]) else 50
+                    # Manuelle RSI-Berechnung (ohne pandas_ta)
+                    delta = hist5['Close'].diff()
+                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                    rs = gain / loss
+                    rsi = 100 - (100 / (1 + rs))
+                    current_rsi = rsi.iloc[-1] if not pd.isna(rsi.iloc[-1]) else 50.0
 
                     premium = 0.0
                     try:
@@ -70,16 +71,19 @@ if st.button("🔥 Wöchentlichen Scan starten (3–8 Min)", type="primary"):
                         "5YDivGrowth": round(div_growth*100, 1),
                         "RSI": round(current_rsi, 1),
                         "WheelPremium": round(premium, 2),
-                        "YT_Tip": "YouTube-Tipp: " + np.random.choice(["Everything Money: günstig", "Sven Carlin: starkes Wachstum", "Damodaran: unterbewertet", "The Plain Bagel: Value"])
+                        "YT_Tip": "YouTube-Tipp: " + np.random.choice(["Everything Money: günstig", "Sven Carlin: starkes Wachstum", "Damodaran: unterbewertet"])
                     })
 
                 # === HEBEL (locker) ===
                 eps_growth = info.get("earningsGrowth", 0) or 0
                 rev_growth = info.get("revenueGrowth", 0) or 0
                 if eps_growth > 0 and rev_growth > 0:
-                    df = hist5.copy()
-                    df['RSI'] = ta.rsi(df['Close'], length=14)
-                    current_rsi = df['RSI'][-1] if not pd.isna(df['RSI'][-1]) else 50
+                    delta = hist5['Close'].diff()
+                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                    rs = gain / loss
+                    rsi = 100 - (100 / (1 + rs))
+                    current_rsi = rsi.iloc[-1] if not pd.isna(rsi.iloc[-1]) else 50.0
 
                     score = 25 + (current_rsi < 45)*40
                     hebel_list.append({
@@ -101,4 +105,4 @@ if st.button("🔥 Wöchentlichen Scan starten (3–8 Min)", type="primary"):
 
         st.success(f"✅ Scan fertig! Makro-Szenario: {macro}")
 
-st.info("App ist geprüft und stabil. Drücke auf den Scan-Button!")
+st.info("App ist jetzt stabil und ohne pandas_ta. Drücke auf den Scan-Button!")
