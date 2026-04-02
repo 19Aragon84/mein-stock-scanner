@@ -10,16 +10,10 @@ import requests
 import streamlit as st
 import yfinance as yf
 
-# -----------------------------
-# Page setup
-# -----------------------------
 st.set_page_config(page_title="Wheel + Leverage Scanner v2", layout="wide")
 st.title("🚀 Wheel + Leverage Scanner v2")
 st.caption("Freie Daten | robustere Universe-Logik | approximiertes Delta | bessere Scores")
 
-# -----------------------------
-# Sidebar
-# -----------------------------
 st.sidebar.header("Einstellungen")
 
 universe_choice = st.sidebar.multiselect(
@@ -72,9 +66,6 @@ macro = st.sidebar.selectbox(
 
 debug_mode = st.sidebar.checkbox("Debug-Ausgaben anzeigen", value=False)
 
-# -----------------------------
-# Config
-# -----------------------------
 RISK_FREE_RATE = 0.04
 TRADING_DAYS = 252
 
@@ -156,9 +147,6 @@ class UnderlyingSnapshot:
     score_macro_bonus: float
 
 
-# -----------------------------
-# Helper functions
-# -----------------------------
 def safe_float(x, default=None):
     try:
         if x is None or pd.isna(x):
@@ -265,9 +253,6 @@ def add_rows(rows: List[Dict[str, str]], symbols: List[str], source: str, suffix
         rows.append({"Ticker": sym, "Source": source})
 
 
-# -----------------------------
-# Universe loading
-# -----------------------------
 @st.cache_data(ttl=86400)
 def get_universe(selected: Tuple[str, ...]) -> Tuple[pd.DataFrame, List[str]]:
     rows: List[Dict[str, str]] = []
@@ -279,13 +264,14 @@ def get_universe(selected: Tuple[str, ...]) -> Tuple[pd.DataFrame, List[str]]:
             sp = sp_tables[0]
             add_rows(rows, sp["Symbol"].astype(str).tolist(), "S&P 500")
         except Exception as e:
-            errors.append(f"S&P 500 Fehler: {e} | Fallback verwendet")
+            errors.append("S&P 500 Fehler: " + str(e) + " | Fallback verwendet")
             add_rows(rows, FALLBACK_TICKERS["S&P 500"], "S&P 500")
 
     if "Nasdaq-100" in selected:
         try:
             ndx_tables = fetch_html_tables("https://en.wikipedia.org/wiki/Nasdaq-100")
             ndx = None
+            ticker_col = None
             for table in ndx_tables:
                 for col in table.columns:
                     if "Ticker" in str(col):
@@ -294,13 +280,11 @@ def get_universe(selected: Tuple[str, ...]) -> Tuple[pd.DataFrame, List[str]]:
                         break
                 if ndx is not None:
                     break
-
-            if ndx is None:
+            if ndx is None or ticker_col is None:
                 raise ValueError("Ticker-Spalte für Nasdaq-100 nicht gefunden")
-
             add_rows(rows, ndx[ticker_col].astype(str).tolist(), "Nasdaq-100")
         except Exception as e:
-            errors.append(f"Nasdaq-100 Fehler: {e} | Fallback verwendet")
+            errors.append("Nasdaq-100 Fehler: " + str(e) + " | Fallback verwendet")
             add_rows(rows, FALLBACK_TICKERS["Nasdaq-100"], "Nasdaq-100")
 
     if "Dow Jones" in selected:
@@ -311,13 +295,11 @@ def get_universe(selected: Tuple[str, ...]) -> Tuple[pd.DataFrame, List[str]]:
                 if "Symbol" in table.columns:
                     dow = table
                     break
-
             if dow is None:
                 raise ValueError("Symbol-Spalte für Dow Jones nicht gefunden")
-
             add_rows(rows, dow["Symbol"].astype(str).tolist(), "Dow Jones")
         except Exception as e:
-            errors.append(f"Dow Jones Fehler: {e} | Fallback verwendet")
+            errors.append("Dow Jones Fehler: " + str(e) + " | Fallback verwendet")
             add_rows(rows, FALLBACK_TICKERS["Dow Jones"], "Dow Jones")
 
     if "DAX" in selected:
@@ -325,7 +307,6 @@ def get_universe(selected: Tuple[str, ...]) -> Tuple[pd.DataFrame, List[str]]:
             dax_tables = fetch_html_tables("https://en.wikipedia.org/wiki/DAX")
             dax = None
             ticker_col = None
-
             for table in dax_tables:
                 for col in table.columns:
                     if "Ticker" in str(col):
@@ -334,13 +315,11 @@ def get_universe(selected: Tuple[str, ...]) -> Tuple[pd.DataFrame, List[str]]:
                         break
                 if dax is not None:
                     break
-
             if dax is None or ticker_col is None:
                 raise ValueError("Ticker-Spalte für DAX nicht gefunden")
-
             add_rows(rows, dax[ticker_col].astype(str).tolist(), "DAX", suffix=".DE")
         except Exception as e:
-            errors.append(f"DAX Fehler: {e} | Fallback verwendet")
+            errors.append("DAX Fehler: " + str(e) + " | Fallback verwendet")
             add_rows(rows, FALLBACK_TICKERS["DAX"], "DAX", suffix=".DE")
 
     universe_df = pd.DataFrame(rows).drop_duplicates(subset=["Ticker"]).reset_index(drop=True)
@@ -351,9 +330,6 @@ def get_universe(selected: Tuple[str, ...]) -> Tuple[pd.DataFrame, List[str]]:
     return universe_df, errors
 
 
-# -----------------------------
-# Price data
-# -----------------------------
 @st.cache_data(ttl=3600)
 def load_price_history(tickers: Tuple[str, ...], period: str = "18mo") -> pd.DataFrame:
     return yf.download(
@@ -376,7 +352,6 @@ def extract_close_volume(download_df: pd.DataFrame, ticker: str) -> Optional[pd.
 
         if len(sub) < 80:
             return None
-
         return sub
     except Exception:
         return None
@@ -414,9 +389,6 @@ def compute_price_features(pxv: pd.DataFrame) -> Dict[str, float]:
     }
 
 
-# -----------------------------
-# Fundamentals
-# -----------------------------
 def get_info_fast(ticker: str) -> Dict:
     tk = yf.Ticker(ticker)
     info = tk.info or {}
@@ -468,9 +440,6 @@ def build_underlying_snapshot(
     )
 
 
-# -----------------------------
-# Wheel option scan
-# -----------------------------
 def scan_best_put_for_wheel(tk: yf.Ticker, snap: UnderlyingSnapshot) -> Optional[Dict]:
     try:
         expiries = tk.options
@@ -575,20 +544,14 @@ def scan_best_put_for_wheel(tk: yf.Ticker, snap: UnderlyingSnapshot) -> Optional
         ["Score", "AnnualizedYield%"],
         ascending=[False, False],
     )
-
     return df.iloc[0].to_dict()
 
 
-# -----------------------------
-# Leverage scoring
-# -----------------------------
 def score_leverage_candidate(snap: UnderlyingSnapshot) -> Optional[Dict]:
     if snap.market_cap < min_market_cap_b * 1e9:
         return None
-
     if snap.avg_dollar_volume_m < min_daily_dollar_vol_m:
         return None
-
     if not (snap.above_50dma and snap.sma50_gt_sma200):
         return None
 
@@ -598,15 +561,8 @@ def score_leverage_candidate(snap: UnderlyingSnapshot) -> Optional[Dict]:
 
     valuation_score = score_linear(valuation_anchor, 10, 35, invert=True) * 20
     growth_score = score_linear(pct(snap.earnings_growth) + pct(snap.revenue_growth), 5, 35) * 20
-    momentum_score = (
-        score_linear(snap.ret_3m * 100, 0, 25) * 15
-        + score_linear(snap.ret_6m * 100, 0, 40) * 10
-    )
-    trend_score = (
-        (10 if snap.above_200dma else 0)
-        + (10 if snap.above_50dma else 0)
-        + (10 if snap.sma50_gt_sma200 else 0)
-    )
+    momentum_score = score_linear(snap.ret_3m * 100, 0, 25) * 15 + score_linear(snap.ret_6m * 100, 0, 40) * 10
+    trend_score = (10 if snap.above_200dma else 0) + (10 if snap.above_50dma else 0) + (10 if snap.sma50_gt_sma200 else 0)
     pullback_score = score_linear(abs(snap.dist_to_52w_high) * 100, 0, 12, invert=True) * 10
     rsi_score = score_linear(snap.rsi14, 40, 62) * 10
     volatility_penalty = score_linear(snap.hist_vol_30d * 100, 25, 65) * 10
@@ -645,9 +601,6 @@ def score_leverage_candidate(snap: UnderlyingSnapshot) -> Optional[Dict]:
     }
 
 
-# -----------------------------
-# Main app
-# -----------------------------
 selected_tuple = tuple(universe_choice)
 
 if selected_tuple:
@@ -658,7 +611,7 @@ else:
 
 tickers = universe_df["Ticker"].tolist()
 
-st.write(f"Universum: **{len(tickers)}** Ticker")
+st.write("Universum: **" + str(len(tickers)) + "** Ticker")
 
 if universe_errors:
     st.warning("Universe-Hinweise: " + " | ".join(universe_errors))
@@ -715,7 +668,10 @@ if st.button("🔥 Scan starten", type="primary"):
         progress.progress(i / total)
 
     st.success(
-        f"Scan fertig. Underlyings nach Basisfiltern: {len(underlyings)} | Fehler: {len(errors)}"
+        "Scan fertig. Underlyings nach Basisfiltern: "
+        + str(len(underlyings))
+        + " | Fehler: "
+        + str(len(errors))
     )
 
     col1, col2 = st.columns(2)
@@ -779,9 +735,18 @@ st.info(
     "Das Put-Delta ist approximiert. Für sauberes Live-Optionsscreening später besser IBKR oder Polygon anbinden."
 )
 
-st.markdown("""
-### Installation
+installation_text = (
+    "### Installation\n\n"
+    "```bash\n"
+    "pip install streamlit yfinance pandas numpy requests lxml html5lib\n"
+    "streamlit run stock_wheel_scanner.py\n"
+    "```\n\n"
+    "### Sinnvolle nächste Schritte\n"
+    "- Covered-Call-Scanner ergänzen\n"
+    "- Earnings-Kalender ergänzen\n"
+    "- CSV-Export / Watchlist-Export\n"
+    "- Relative Strength vs. SPY / QQQ / Sektor-ETFs\n"
+    "- Später IBKR-Adapter nur für den Optionsblock\n"
+)
 
-```bash
-pip install streamlit yfinance pandas numpy requests lxml html5lib
-streamlit run stock_wheel_scanner.py
+st.markdown(installation_text)
